@@ -12,6 +12,7 @@ import javafx.scene.layout.*;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.*;
 
@@ -70,10 +71,61 @@ public class FileManagerApp extends Application{
             }
         });
 
+        // When node is selected, update currentPathField
+
+        fileTreeView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, selected) -> {
+            if (selected != null){
+                Path path = selected.getValue();
+                currentPathField.setText(path.toAbsolutePath().toString());
+            }
+        });
+
+        // When file is double-clicked, read it
+
+        fileTreeView.setOnMouseClicked(event -> {
+           if (event.getClickCount() == 2){
+               TreeItem<Path> selected = fileTreeView.getSelectionModel().getSelectedItem();
+               if (selected != null){
+                   Path path = selected.getValue();
+                   if (Files.isRegularFile(path)){
+                       openFile(path);
+                   }
+               }
+           }
+        });
+
+        // fileContentArea
+
+        fileContentArea = new TextArea();
+        fileContentArea.setWrapText(false);
+        fileContentArea.setPromptText("File content will appear here...");
+        VBox rightPane = new VBox(new Label("File Contents:"), fileContentArea);
+        rightPane.setSpacing(5);
+        rightPane.setPadding(new Insets(5));
+        VBox.setVgrow(fileContentArea, Priority.ALWAYS);
+
+        SplitPane splitPlane = new SplitPane();
+        splitPlane.setOrientation(Orientation.HORIZONTAL);
+        splitPlane.getItems().addAll(fileTreeView, rightPane);
+
+        VBox centerBox = new VBox(pathBox, splitPlane);
+        VBox.setVgrow(splitPlane, Priority.ALWAYS);
+        root.setCenter(centerBox);
+
+        // Bottom: statusLabel
+
+        statusLabel = new Label("Ready");
+        statusLabel.setPadding(new Insets(3, 8, 3, 8));
+        root.setBottom(statusLabel);
+
+        // Initial load: user home
+
+        Path initialRoot = Paths.get(System.getProperty("user.home"));
+        loadRootDirectory(initialRoot);
+
         Scene scene = new Scene(root, 1000, 600);
         primaryStage.setScene(scene);
         primaryStage.show();
-
     }
 
     // Menu Bar
@@ -122,11 +174,42 @@ public class FileManagerApp extends Application{
 
     // Navigation
 
-    private void chooseRootDirectory (Stage stage){}
+    private void chooseRootDirectory(Stage stage) {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Choose Root Folder");
+        chooser.setInitialDirectory(Paths.get(System.getProperty("user.home")).toFile());
 
-    private void loadRootDirectory (Path rootPath){}
+        File chosen = chooser.showDialog(stage);
+        if (chosen != null) {
+            loadRootDirectory(chosen.toPath());
+        }
+    }
 
-    private void refreshTree(){}
+    private void loadRootDirectory(Path rootPath) {
+        try {
+            if (!Files.isDirectory(rootPath)) {
+                showError("Selected path is not a directory: " + rootPath, null);
+                return;
+            }
+            TreeItem<Path> rootItem = fileService.createNode(rootPath);
+            rootItem.setExpanded(true);
+            fileTreeView.setRoot(rootItem);
+            fileTreeView.getSelectionModel().select(rootItem);
+            currentPathField.setText(rootPath.toAbsolutePath().toString());
+            currentOpenFile = null;
+            fileContentArea.clear();
+            setStatus("Loaded root directory: " + rootPath.toAbsolutePath());
+        } catch (Exception ex) {
+            showError("Failed to load root directory: " + rootPath, ex);
+        }
+    }
+
+    private void refreshTree() {
+        TreeItem<Path> root = fileTreeView.getRoot();
+        if (root != null) {
+            loadRootDirectory(root.getValue());
+        }
+    }
 
     // CRUD Operations
 
@@ -138,7 +221,7 @@ public class FileManagerApp extends Application{
 
     private void createNewFolder(){}
 
-    private void openFile(){}
+    private void openFile(Path file){}
 
     private void updateCurrentFile(){}
 
