@@ -104,12 +104,13 @@ public class FileManagerApp extends Application{
         rightPane.setPadding(new Insets(5));
         VBox.setVgrow(fileContentArea, Priority.ALWAYS);
 
-        SplitPane splitPlane = new SplitPane();
-        splitPlane.setOrientation(Orientation.HORIZONTAL);
-        splitPlane.getItems().addAll(fileTreeView, rightPane);
+        SplitPane splitPane = new SplitPane();
+        splitPane.setOrientation(Orientation.HORIZONTAL);
+        splitPane.getItems().addAll(fileTreeView, rightPane);
+        splitPane.setDividerPositions(0.3);
 
-        VBox centerBox = new VBox(pathBox, splitPlane);
-        VBox.setVgrow(splitPlane, Priority.ALWAYS);
+        VBox centerBox = new VBox(pathBox, splitPane);
+        VBox.setVgrow(splitPane, Priority.ALWAYS);
         root.setCenter(centerBox);
 
         // Bottom: statusLabel
@@ -131,13 +132,21 @@ public class FileManagerApp extends Application{
     // Menu Bar
 
     private MenuBar createMenuBar (Stage stage){
-        Menu fileMenu = new Menu("File");
+        Menu fileMenu = new Menu("Menu");
 
         MenuItem chooseRoot = new MenuItem("Open Root Folder");
+        chooseRoot.setOnAction(e -> chooseRootDirectory(stage));
+        chooseRoot.setAccelerator(new KeyCodeCombination(KeyCode.O, KeyCombination.CONTROL_DOWN));
 
         MenuItem saveItem = new MenuItem("Save Current File");
+        saveItem.setOnAction(e -> updateCurrentFile());
+        saveItem.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN));
 
-        fileMenu.getItems().addAll(chooseRoot, saveItem);
+        MenuItem exitItem = new MenuItem("Exit");
+        exitItem.setOnAction(e -> stage.close());
+        exitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.CONTROL_DOWN));
+
+        fileMenu.getItems().addAll(chooseRoot, saveItem, new SeparatorMenuItem(), exitItem);
 
         return new MenuBar(fileMenu);
     }
@@ -146,18 +155,32 @@ public class FileManagerApp extends Application{
 
     private ToolBar createToolBar (){
         Button btnNewFile = new Button("New File");
+        btnNewFile.setOnAction(e -> createNewFile());
 
         Button btnNewFolder = new Button("New Folder");
+        btnNewFolder.setOnAction(e -> createNewFolder());
 
         Button btnOpenFile = new Button("Open");
+        btnOpenFile.setOnAction(e -> {
+            Path selected = getSelectedPath();
+            if (selected != null && Files.isRegularFile(selected)) {
+                openFile(selected);
+            } else {
+                showInfo("Select a file to open.");
+            }
+        });
 
         Button btnSave = new Button("Save");
+        btnSave.setOnAction(e -> updateCurrentFile());
 
         Button btnRename = new Button("Rename");
+        btnRename.setOnAction(e -> renameSelected());
 
         Button btnDelete = new Button("Delete");
+        btnDelete.setOnAction(e -> deleteSelected());
 
         Button btnRefresh = new Button("Refresh");
+        btnRefresh.setOnAction(e -> refreshTree());
 
         return new ToolBar(
                 btnNewFile,
@@ -213,35 +236,234 @@ public class FileManagerApp extends Application{
 
     // CRUD Operations
 
-    // private Path getSelectedPath(){}
+    private void createNewFile() {
+        Path dir = getCurrentDirectory();
+        if (dir == null) {
+            showInfo("No directory selected.");
+            return;
+        }
 
-    // private Path getCurrentDirectory(){}
+        TextInputDialog dialog = new TextInputDialog("newfile.txt");
+        dialog.setTitle("Create New File");
+        dialog.setHeaderText("Create a new file in:\n" + dir.toAbsolutePath());
+        dialog.setContentText("File name:");
 
-    private void createNewFile(){}
+        dialog.showAndWait().ifPresent(name -> {
+            if (name.trim().isEmpty()) {
+                showInfo("File name cannot be empty.");
+                return;
+            }
+            try {
+                Path newFile = fileService.createFile(dir, name.trim());
+                setStatus("Created file: " + newFile.getFileName());
+                refreshTree();
+                selectPathInTree(newFile);
+                openFile(newFile);
+            } catch (IOException ex) {
+                showError("Failed to create file: " + name, ex);
+            }
+        });
+    }
 
-    private void createNewFolder(){}
+    private void createNewFolder() {
+        Path dir = getCurrentDirectory();
+        if (dir == null) {
+            showInfo("No directory selected.");
+            return;
+        }
 
-    private void openFile(Path file){}
+        TextInputDialog dialog = new TextInputDialog("New Folder");
+        dialog.setTitle("Create New Folder");
+        dialog.setHeaderText("Create a new folder in:\n" + dir.toAbsolutePath());
+        dialog.setContentText("Folder name:");
 
-    private void updateCurrentFile(){}
+        dialog.showAndWait().ifPresent(name -> {
+            if (name.trim().isEmpty()) {
+                showInfo("Folder name cannot be empty.");
+                return;
+            }
+            try {
+                Path newFolder = fileService.createDirectory(dir, name.trim());
+                setStatus("Created folder: " + newFolder.getFileName());
+                refreshTree();
+                selectPathInTree(newFolder);
+            } catch (IOException ex) {
+                showError("Failed to create folder: " + name, ex);
+            }
+        });
+    }
 
-    private void deleteSelectedFile(){}
+    private void openFile(Path file) {
+        try {
+            if (!Files.isRegularFile(file)) {
+                showInfo("Selected path is not a regular file.");
+                return;
+            }
+            if (!fileService.isTextFile(file)) {
+                fileContentArea.setText("Preview not available for this file type.\n\n"
+                        + "Path: " + file.toAbsolutePath()
+                        + "\nSize: " + fileService.safeFileSize(file) + " bytes");
+                currentOpenFile = null;
+                setStatus("Selected non-text file: " + file.getFileName());
+                return;
+            }
+            String content = fileService.readFileContent(file);
+            fileContentArea.setText(content);
+            currentOpenFile = file;
+            setStatus("Opened file: " + file.toAbsolutePath());
+        } catch (IOException ex) {
+            showError("Failed to open file: " + file.getFileName(), ex);
+        }
+    }
 
-    private void renameSelectedFile(){}
+    private void updateCurrentFile() {
+        if (currentOpenFile == null) {
+            showInfo("No file is currently open to save.");
+            return;
+        }
+        try {
+            String newContent = fileContentArea.getText();
+            fileService.writeFileContent(currentOpenFile, newContent);
+            setStatus("Saved changes to: " + currentOpenFile.getFileName());
+        } catch (IOException ex) {
+            showError("Failed to save file: " + currentOpenFile.getFileName(), ex);
+        }
+    }
 
-    // Tree Helper
+    private void deleteSelected() {
+        Path target = getSelectedPath();
+        if (target == null) {
+            showInfo("Select a file or folder to delete.");
+            return;
+        }
 
-    private void selectPathInTree(Path path){}
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Delete Confirmation");
+        confirm.setHeaderText("Are you sure you want to delete?");
+        confirm.setContentText(target.toAbsolutePath().toString());
 
-    // private TreeItem<Path> findTreeItem(TreeItem<Path> current, Path target){}
+        confirm.showAndWait().ifPresent(result -> {
+            if (result == ButtonType.OK) {
+                try {
+                    fileService.deleteRecursive(target);
+                    setStatus("Deleted: " + target.getFileName());
+                    if (target.equals(currentOpenFile)) {
+                        currentOpenFile = null;
+                        fileContentArea.clear();
+                    }
+                    refreshTree();
+                } catch (IOException ex) {
+                    showError("Failed to delete: " + target.getFileName(), ex);
+                }
+            }
+        });
+    }
+
+    private void renameSelected() {
+        Path target = getSelectedPath();
+        if (target == null) {
+            showInfo("Select a file or folder to rename.");
+            return;
+        }
+
+        TextInputDialog dialog = new TextInputDialog(target.getFileName().toString());
+        dialog.setTitle("Rename");
+        dialog.setHeaderText("Rename:\n" + target.toAbsolutePath());
+        dialog.setContentText("New name:");
+
+        dialog.showAndWait().ifPresent(newName -> {
+            String trimmed = newName.trim();
+            if (trimmed.isEmpty()) {
+                showInfo("New name cannot be empty.");
+                return;
+            }
+            try {
+                Path renamed = fileService.rename(target, trimmed);
+                setStatus("Renamed to: " + renamed.getFileName());
+                if (currentOpenFile != null && currentOpenFile.equals(target)) {
+                    currentOpenFile = renamed;
+                }
+                refreshTree();
+                selectPathInTree(renamed);
+            } catch (IOException ex) {
+                showError("Failed to rename: " + target.getFileName(), ex);
+            }
+        });
+    }
+
+    // Helpers
+
+    private Path getSelectedPath() {
+        TreeItem<Path> selectedItem = fileTreeView.getSelectionModel().getSelectedItem();
+        return selectedItem == null ? null : selectedItem.getValue();
+    }
+
+    private Path getCurrentDirectory() {
+        Path selected = getSelectedPath();
+        if (selected == null) {
+            TreeItem<Path> root = fileTreeView.getRoot();
+            return root == null ? Paths.get(System.getProperty("user.home")) : root.getValue();
+        }
+        if (Files.isDirectory(selected)) {
+            return selected;
+        } else {
+            return selected.getParent();
+        }
+    }
+
+    private void selectPathInTree(Path path) {
+        TreeItem<Path> root = fileTreeView.getRoot();
+        if (root == null) return;
+        TreeItem<Path> found = findTreeItem(root, path);
+        if (found != null) {
+            fileTreeView.getSelectionModel().select(found);
+        }
+    }
+
+    private TreeItem<Path> findTreeItem(TreeItem<Path> current, Path target) {
+        if (current.getValue().equals(target)) {
+            return current;
+        }
+        current.setExpanded(true);
+        for (TreeItem<Path> child : current.getChildren()) {
+            TreeItem<Path> result = findTreeItem(child, target);
+            if (result != null) return result;
+        }
+        return null;
+    }
 
     // Status and errors
 
-    private void setStatus(String msg){}
+    private void setStatus(String msg) {
+        statusLabel.setText(msg);
+        statusLabel.setStyle("-fx-text-fill: -fx-text-base-color; -fx-padding: 3 8 3 8;");
+    }
 
-    private void showError(String msh, Exception e){}
+    private void showError(String msg, Exception ex) {
+        System.err.println(msg);
+        if (ex != null) {
+            ex.printStackTrace();
+        }
+        statusLabel.setText("Error: " + msg);
+        statusLabel.setStyle("-fx-text-fill: red; -fx-padding: 3 8 3 8;");
 
-    private void showInfo(String msg){}
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Error");
+        alert.setHeaderText("Operation failed");
+        alert.setContentText(msg);
+        alert.showAndWait();
+    }
+
+    private void showInfo(String msg) {
+        statusLabel.setText(msg);
+        statusLabel.setStyle("-fx-text-fill: -fx-text-base-color; -fx-padding: 3 8 3 8;");
+
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Info");
+        alert.setHeaderText(null);
+        alert.setContentText(msg);
+        alert.showAndWait();
+    }
 
     // Main
 
