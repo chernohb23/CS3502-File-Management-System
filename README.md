@@ -1,6 +1,6 @@
 # CS-3502 File Management System
 
-A simple JavaFX application for browsing directories, viewing/editing text files, and performing basic file operations (create, rename, delete).
+A simple JavaFX application for browsing directories, viewing/editing text files, and performing basic file operations (create, read, update, delete, rename).
 
 ## Prerequisites
 
