@@ -36,7 +36,7 @@ public class FileManagerApp extends Application{
 
         BorderPane root = new BorderPane();
 
-        // Top: menuBar and toolBar
+        // Top: menu bar and toolbar (common actions)
 
         MenuBar menuBar = createMenuBar(primaryStage);
         ToolBar toolBar = createToolBar();
@@ -44,7 +44,7 @@ public class FileManagerApp extends Application{
         VBox topBox = new VBox(menuBar, toolBar);
         root.setTop(topBox);
 
-        // Top-middle: currentPathField
+        // Top-middle: shows the currently selected path
 
         HBox pathBox = new HBox(8);
         pathBox.setPadding(new Insets(5, 10, 5, 10));
@@ -54,10 +54,11 @@ public class FileManagerApp extends Application{
         HBox.setHgrow(currentPathField, Priority.ALWAYS);
         pathBox.getChildren().addAll(pathLabel, currentPathField);
 
-        // Center: SplitPlane (fileTreeView and fileContentArea)
+        // Center: split pane with the file tree (left) and file contents (right)
 
         fileTreeView = new TreeView<>();
         fileTreeView.setShowRoot(true);
+        // Custom cell so we only display the file/folder name (not full path)
         fileTreeView.setCellFactory(tv -> new TreeCell<>(){
             @Override
             protected void updateItem(Path item, boolean empty){
@@ -71,7 +72,7 @@ public class FileManagerApp extends Application{
             }
         });
 
-        // When node is selected, update currentPathField
+        // When the user selects a node, reflect it in the "Current Path" field
 
         fileTreeView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, selected) -> {
             if (selected != null){
@@ -80,7 +81,7 @@ public class FileManagerApp extends Application{
             }
         });
 
-        // When file is double-clicked, read it
+        // Double-click a regular file to open it in the editor
 
         fileTreeView.setOnMouseClicked(event -> {
            if (event.getClickCount() == 2){
@@ -94,7 +95,7 @@ public class FileManagerApp extends Application{
            }
         });
 
-        // fileContentArea
+        // Right side: basic text editor area for text files
 
         fileContentArea = new TextArea();
         fileContentArea.setWrapText(false);
@@ -113,13 +114,13 @@ public class FileManagerApp extends Application{
         VBox.setVgrow(splitPane, Priority.ALWAYS);
         root.setCenter(centerBox);
 
-        // Bottom: statusLabel
+        // Bottom: status bar for feedback messages
 
         statusLabel = new Label("Ready");
         statusLabel.setPadding(new Insets(3, 8, 3, 8));
         root.setBottom(statusLabel);
 
-        // Initial load: user home
+        // Initial load: start from the user's home directory
 
         Path initialRoot = Paths.get(System.getProperty("user.home"));
         loadRootDirectory(initialRoot);
@@ -131,8 +132,8 @@ public class FileManagerApp extends Application{
 
     // Menu Bar
 
-    private MenuBar createMenuBar (Stage stage){
-        Menu fileMenu = new Menu("Menu");
+    private MenuBar createMenuBar (Stage stage){         // Builds the File menu (open root, save file, exit) with shortcuts.
+        Menu fileMenu = new Menu("File");
 
         MenuItem chooseRoot = new MenuItem("Open Root Folder");
         chooseRoot.setOnAction(e -> chooseRootDirectory(stage));
@@ -153,7 +154,7 @@ public class FileManagerApp extends Application{
 
     // Tool Bar
 
-    private ToolBar createToolBar (){
+    private ToolBar createToolBar (){                   // Creates the toolbar with common actions (new, open, save, rename, delete, refresh).
         Button btnNewFile = new Button("New File");
         btnNewFile.setOnAction(e -> createNewFile());
 
@@ -197,7 +198,7 @@ public class FileManagerApp extends Application{
 
     // Navigation
 
-    private void chooseRootDirectory(Stage stage) {
+    private void chooseRootDirectory(Stage stage) {              // Lets the user pick a root folder to browse in the tree.
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Choose Root Folder");
         chooser.setInitialDirectory(Paths.get(System.getProperty("user.home")).toFile());
@@ -208,7 +209,7 @@ public class FileManagerApp extends Application{
         }
     }
 
-    private void loadRootDirectory(Path rootPath) {
+    private void loadRootDirectory(Path rootPath) {          // Loads the given root path into the tree and resets the editor state.
         try {
             if (!Files.isDirectory(rootPath)) {
                 showError("Selected path is not a directory: " + rootPath, null);
@@ -227,7 +228,7 @@ public class FileManagerApp extends Application{
         }
     }
 
-    private void refreshTree() {
+    private void refreshTree() {             // Rebuilds the tree for the current root selection (mostly used after changes).
         TreeItem<Path> root = fileTreeView.getRoot();
         if (root != null) {
             loadRootDirectory(root.getValue());
@@ -236,7 +237,7 @@ public class FileManagerApp extends Application{
 
     // CRUD Operations
 
-    private void createNewFile() {
+    private void createNewFile() {             // Creates a new empty file in the currently selected folder.
         Path dir = getCurrentDirectory();
         if (dir == null) {
             showInfo("No directory selected.");
@@ -265,7 +266,7 @@ public class FileManagerApp extends Application{
         });
     }
 
-    private void createNewFolder() {
+    private void createNewFolder() {           // Creates a new folder in the currently selected directory.
         Path dir = getCurrentDirectory();
         if (dir == null) {
             showInfo("No directory selected.");
@@ -293,7 +294,7 @@ public class FileManagerApp extends Application{
         });
     }
 
-    private void openFile(Path file) {
+    private void openFile(Path file) {                // Opens a text file into the editor (if considered a text file by FileService).
         try {
             if (!Files.isRegularFile(file)) {
                 showInfo("Selected path is not a regular file.");
@@ -316,7 +317,7 @@ public class FileManagerApp extends Application{
         }
     }
 
-    private void updateCurrentFile() {
+    private void updateCurrentFile() {                 // Saves the content of the editor back to the currently open file.
         if (currentOpenFile == null) {
             showInfo("No file is currently open to save.");
             return;
@@ -330,7 +331,7 @@ public class FileManagerApp extends Application{
         }
     }
 
-    private void deleteSelected() {
+    private void deleteSelected() {                    // Deletes the selected file or folder (recursively for folders).
         Path target = getSelectedPath();
         if (target == null) {
             showInfo("Select a file or folder to delete.");
@@ -345,7 +346,7 @@ public class FileManagerApp extends Application{
         confirm.showAndWait().ifPresent(result -> {
             if (result == ButtonType.OK) {
                 try {
-                    fileService.deleteRecursive(target);
+                    fileService.deleteFile(target);
                     setStatus("Deleted: " + target.getFileName());
                     if (target.equals(currentOpenFile)) {
                         currentOpenFile = null;
@@ -359,10 +360,10 @@ public class FileManagerApp extends Application{
         });
     }
 
-    private void renameSelected() {
+    private void renameSelected() {                 // Renames the selected file or folder.
         Path target = getSelectedPath();
         if (target == null) {
-            showInfo("Select a file or folder to rename.");
+            showInfo("Select a file or folder to renameFile.");
             return;
         }
 
@@ -378,7 +379,7 @@ public class FileManagerApp extends Application{
                 return;
             }
             try {
-                Path renamed = fileService.rename(target, trimmed);
+                Path renamed = fileService.renameFile(target, trimmed);
                 setStatus("Renamed to: " + renamed.getFileName());
                 if (currentOpenFile != null && currentOpenFile.equals(target)) {
                     currentOpenFile = renamed;
@@ -386,20 +387,20 @@ public class FileManagerApp extends Application{
                 refreshTree();
                 selectPathInTree(renamed);
             } catch (IOException ex) {
-                showError("Failed to rename: " + target.getFileName(), ex);
+                showError("Failed to renameFile: " + target.getFileName(), ex);
             }
         });
     }
 
     // Helpers
 
-    private Path getSelectedPath() {
+    private Path getSelectedPath() {                         // Returns the Path of the currently selected tree node (or null).
         TreeItem<Path> selectedItem = fileTreeView.getSelectionModel().getSelectedItem();
         return selectedItem == null ? null : selectedItem.getValue();
     }
 
-    private Path getCurrentDirectory() {
-        Path selected = getSelectedPath();
+    private Path getCurrentDirectory() {                 // Returns the directory that should be used as the target for create operations.
+        Path selected = getSelectedPath();               // If a file is selected, its parent directory is returned.
         if (selected == null) {
             TreeItem<Path> root = fileTreeView.getRoot();
             return root == null ? Paths.get(System.getProperty("user.home")) : root.getValue();
@@ -411,35 +412,53 @@ public class FileManagerApp extends Application{
         }
     }
 
-    private void selectPathInTree(Path path) {
+    private void selectPathInTree(Path path) {              // Selects and expands the tree to the given path.
         TreeItem<Path> root = fileTreeView.getRoot();
-        if (root == null) return;
-        TreeItem<Path> found = findTreeItem(root, path);
-        if (found != null) {
-            fileTreeView.getSelectionModel().select(found);
-        }
-    }
+        if (root == null || path == null) return;
 
-    private TreeItem<Path> findTreeItem(TreeItem<Path> current, Path target) {
-        if (current.getValue().equals(target)) {
-            return current;
+        Path rootPath = root.getValue().toAbsolutePath().normalize();
+        Path target = path.toAbsolutePath().normalize();
+
+        if (!target.startsWith(rootPath)) {
+            return; 
         }
-        current.setExpanded(true);
-        for (TreeItem<Path> child : current.getChildren()) {
-            TreeItem<Path> result = findTreeItem(child, target);
-            if (result != null) return result;
+
+        root.setExpanded(true);
+        TreeItem<Path> current = root;
+
+        Path rel = rootPath.relativize(target);
+        Path running = rootPath;
+
+        for (Path part : rel) {
+            running = running.resolve(part);
+            current.getChildren().size();
+
+            TreeItem<Path> next = null;
+            for (TreeItem<Path> child : current.getChildren()) {
+                Path childPath = child.getValue().toAbsolutePath().normalize();
+                if (childPath.equals(running)) {
+                    next = child;
+                    break;
+                }
+            }
+            if (next == null) {
+                return;
+            }
+            next.setExpanded(true);
+            current = next;
         }
-        return null;
+
+        fileTreeView.getSelectionModel().select(current);
     }
 
     // Status and errors
 
-    private void setStatus(String msg) {
+    private void setStatus(String msg) {           // Shows a normal (non-error) status message in the status bar.
         statusLabel.setText(msg);
         statusLabel.setStyle("-fx-text-fill: -fx-text-base-color; -fx-padding: 3 8 3 8;");
     }
 
-    private void showError(String msg, Exception ex) {
+    private void showError(String msg, Exception ex) {   // Displays an error both in the status bar and via an alert dialog.
         System.err.println(msg);
         if (ex != null) {
             ex.printStackTrace();
@@ -454,7 +473,7 @@ public class FileManagerApp extends Application{
         alert.showAndWait();
     }
 
-    private void showInfo(String msg) {
+    private void showInfo(String msg) {           // Lightweight information messages.
         statusLabel.setText(msg);
         statusLabel.setStyle("-fx-text-fill: -fx-text-base-color; -fx-padding: 3 8 3 8;");
 

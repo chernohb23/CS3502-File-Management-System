@@ -58,7 +58,7 @@
             <!-- Default configuration for running with: mvn clean javafx:run -->
             <id>default-cli</id>
             <configuration>
-              <mainClass>com.example.cs3502filemanagementsystem/com.example.cs3502filemanagementsystem.HelloApplication</mainClass>
+              <mainClass>com.example.cs3502filemanagementsystem/com.example.cs3502filemanagementsystem.FileManagerApp</mainClass>
               <launcher>app</launcher>
               <jlinkZipName>app</jlinkZipName>
               <jlinkImageName>app</jlinkImageName>

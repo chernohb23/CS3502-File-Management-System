@@ -15,13 +15,14 @@ public class FileService {
 
     // Tree building
 
-    public TreeItem<Path> createNode(Path path) {
-        return new TreeItem<>(path){
+    public TreeItem<Path> createNode(Path path) {            // Creates a TreeItem<Path> that lazily loads its children.
+        return new TreeItem<>(path){                         // Directories are expanded only when needed to keep the UI responsive
             private boolean isFirstTimeChildren = true;
             private boolean isFirstTimeLeaf = true;
             private boolean leaf;
 
             @Override
+            // Lazily compute the children once
             public ObservableList<TreeItem<Path>> getChildren() {
                 if (isFirstTimeChildren) {
                     isFirstTimeChildren = false;
@@ -31,7 +32,7 @@ public class FileService {
             }
 
             @Override
-            public boolean isLeaf() {
+            public boolean isLeaf() {         //Compute leaf-ness only once (files are leaves, directories aren't)
                 if (isFirstTimeLeaf) {
                     isFirstTimeLeaf = false;
                     leaf = !Files.isDirectory(getValue());
@@ -39,6 +40,7 @@ public class FileService {
                 return leaf;
             }
 
+            // Lists and sorts children so that folders come first, then files
             private ObservableList<TreeItem<Path>> buildChildren(TreeItem<Path> treeItem) {
                 Path f = treeItem.getValue();
                 if (f == null || !Files.isDirectory(f)) {
@@ -75,7 +77,7 @@ public class FileService {
 
     // Create
 
-    public Path createFile(Path directory, String filename) throws IOException {
+    public Path createFile(Path directory, String filename) throws IOException {     // Creates an empty file with the given name inside the provided directory.
         Path newFile = directory.resolve(filename);
         if (Files.exists(newFile)){
             throw new FileAlreadyExistsException("File already exists: " + newFile);
@@ -83,7 +85,7 @@ public class FileService {
         return Files.createFile(newFile);
     }
 
-    public Path createDirectory(Path directory, String folderName) throws IOException {
+    public Path createDirectory(Path directory, String folderName) throws IOException {   // Creates a new directory with the given name inside the provided directory.
         Path newDir = directory.resolve(folderName);
         if (Files.exists(newDir)) {
             throw new FileAlreadyExistsException("Directory already exists: " + newDir);
@@ -93,7 +95,7 @@ public class FileService {
 
     // Read
 
-    public String readFileContent(Path path) throws IOException {
+    public String readFileContent(Path path) throws IOException {      // Reads the entire file as a UTF-8 string. Throws if path is missing or is a directory.
         if (!Files.exists(path)) {
             throw new NoSuchFileException("File not found: " + path);
         }
@@ -105,7 +107,7 @@ public class FileService {
 
     // Update
 
-    public void writeFileContent(Path path, String content) throws IOException {
+    public void writeFileContent(Path path, String content) throws IOException {      // Overwrites the file with the provided string content using UTF-8.
         if (!Files.exists(path)) {
             throw new NoSuchFileException("File not found: " + path);
         }
@@ -117,7 +119,7 @@ public class FileService {
 
     // Delete
 
-    public void deleteRecursive(Path path) throws IOException {
+    public void deleteFile(Path path) throws IOException {              // Deletes a file or a directory tree (children first, then the root).
         if (!Files.exists(path)) {
             throw new NoSuchFileException("Path not found: " + path);
         }
@@ -135,10 +137,10 @@ public class FileService {
 
     // Rename
 
-    public Path rename(Path path, String newName) throws IOException {
+    public Path renameFile(Path path, String newName) throws IOException {       // Renames a file or directory within the same parent folder.
         Path parent = path.getParent();
         if (parent == null) {
-            throw new IOException("Cannot rename root path: " + path);
+            throw new IOException("Cannot renameFile root path: " + path);
         }
         Path target = parent.resolve(newName);
         if (Files.exists(target)) {
@@ -149,7 +151,7 @@ public class FileService {
 
     // Helpers
 
-    public boolean isTextFile(Path path) {
+    public boolean isTextFile(Path path) {                            // File type check based on extension; used to decide if we can preview/edit.
         if (path == null || Files.isDirectory(path)) return false;
         String name = path.getFileName().toString().toLowerCase();
 
@@ -164,7 +166,7 @@ public class FileService {
         return false;
     }
 
-    public long safeFileSize(Path path) {
+    public long safeFileSize(Path path) {         // Returns the file size, or 0 on error (for non-fatal UI display).
         try {
             return Files.size(path);
         } catch (IOException e) {
